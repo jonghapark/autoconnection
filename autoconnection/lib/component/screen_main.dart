@@ -312,6 +312,28 @@ class ScanscreenState extends State<Scanscreen> {
             }
           }
         }
+        if (notifyResult[10] == 0x13) {
+          // print('오긴함 ?');
+          int index = -1;
+          for (var i = 0; i < deviceList.length; i++) {
+            if (deviceList[i].peripheral.identifier == peripheral.identifier) {
+              index = i;
+              break;
+            }
+          }
+          // int cal = 0;
+          int tmp = ByteData.sublistView(notifyResult.sublist(12, 14))
+              .getInt16(0, Endian.big);
+          int tmp_humi = ByteData.sublistView(notifyResult.sublist(14, 16))
+              .getInt16(0, Endian.big);
+          setState(() {
+            deviceList[index].cali = tmp;
+            deviceList[index].humi_cali = tmp_humi;
+          });
+
+          print(notifyResult.toString());
+          print('Cali 결과 : ' + tmp.toString() + ' 도 ');
+        }
         if (notifyResult[10] == 0x06) {
           int index = -1;
           for (var i = 0; i < deviceList.length; i++) {
@@ -427,6 +449,29 @@ class ScanscreenState extends State<Scanscreen> {
     print('쓰기 시작 ');
     if (flag == 0) {
       if (deviceList[index].peripheral.name == 'T301') {
+        // cali_write
+        // var writeCharacteristics_cali = await deviceList[index]
+        //     .peripheral
+        //     .writeCharacteristic(
+        //         '00001000-0000-1000-8000-00805f9b34fb',
+        //         '00001001-0000-1000-8000-00805f9b34fb',
+        //         Uint8List.fromList([0x55, 0xAA, 0x01, 0x05] +
+        //             deviceList[index].getMacAddress() +
+        //             [0x0e, 0x04] +
+        //             [0x00, 0x50, 0x00, 0x64]),
+        //         true);
+        // cali_get
+        var writeCharacteristics_caliGet = await deviceList[index]
+            .peripheral
+            .writeCharacteristic(
+                '00001000-0000-1000-8000-00805f9b34fb',
+                '00001001-0000-1000-8000-00805f9b34fb',
+                Uint8List.fromList([0x55, 0xAA, 0x01, 0x05] +
+                    deviceList[index].getMacAddress() +
+                    [0x12, 0x01, 0x01]),
+                true);
+
+        // get History Data - T301
         var writeCharacteristics = await deviceList[index]
             .peripheral
             .writeCharacteristic(
@@ -438,6 +483,32 @@ class ScanscreenState extends State<Scanscreen> {
                     timestamp),
                 true);
       } else if (deviceList[index].peripheral.name == 'T306') {
+        // cali_write
+        var writeCharacteristics_cali = await deviceList[index]
+            .peripheral
+            .writeCharacteristic(
+                '00001000-0000-1000-8000-00805f9b34fb',
+                '00001001-0000-1000-8000-00805f9b34fb',
+                Uint8List.fromList([0x55, 0xAA, 0x01, 0x06] +
+                    deviceList[index].getMacAddress() +
+                    [0x0e, 0x04] +
+                    [0x00, 100 * 2 - (100 ~/ 10)] +
+                    [0x00, 0xa4]),
+                true);
+        // cali_get
+        // print('현재 Cali ! ');
+
+        var writeCharacteristics_caliGet = await deviceList[index]
+            .peripheral
+            .writeCharacteristic(
+                '00001000-0000-1000-8000-00805f9b34fb',
+                '00001001-0000-1000-8000-00805f9b34fb',
+                Uint8List.fromList([0x55, 0xAA, 0x01, 0x06] +
+                    deviceList[index].getMacAddress() +
+                    [0x12, 0x01, 0x01]),
+                true);
+
+        // get History Data - T306
         var writeCharacteristics = await deviceList[index]
             .peripheral
             .writeCharacteristic(
@@ -588,7 +659,7 @@ class ScanscreenState extends State<Scanscreen> {
                   }
                 }
                 if (index != -1) {
-                  print('여기 오냐 ?');
+                  // print('여기 오냐 ?');
                   // connect(index, 0);
                   if (!isConnectedState()) {
                     connect(index, 0);
@@ -635,22 +706,26 @@ class ScanscreenState extends State<Scanscreen> {
                         scanResult.peripheral,
                         scanResult.advertisementData,
                         'scan');
-                    print(currentItem.peripheral.identifier);
-                    print('인 !');
-                    setState(() {
-                      deviceList.add(currentItem);
-                    });
-                    int index = -1;
-                    for (var i = 0; i < deviceList.length; i++) {
-                      if (deviceList[i].peripheral.identifier ==
-                          currentItem.peripheral.identifier) {
-                        index = i;
-                        break;
+                    if (currentItem.getserialNumber() == 'CEDF04' ||
+                        currentItem.getserialNumber() == '967051') {
+                      print(currentItem.peripheral.identifier);
+                      print('인 !');
+                      setState(() {
+                        deviceList.add(currentItem);
+                      });
+
+                      int index = -1;
+                      for (var i = 0; i < deviceList.length; i++) {
+                        if (deviceList[i].peripheral.identifier ==
+                            currentItem.peripheral.identifier) {
+                          index = i;
+                          break;
+                        }
                       }
-                    }
-                    if (index != -1) {
-                      if (!isConnectedState()) {
-                        connect(index, 0);
+                      if (index != -1) {
+                        if (!isConnectedState()) {
+                          connect(index, 0);
+                        }
                       }
                     }
                     // connect(deviceList.length - 1, 0);
@@ -744,15 +819,15 @@ class ScanscreenState extends State<Scanscreen> {
       print('Last Update Time1 : ' + temp.lastUpdate.toString());
       // TODO: 시간 수정(3개) 필수 !
       print('Enable Time1 : ' +
-          DateTime.now().toLocal().subtract(Duration(hours: 6)).toString());
+          DateTime.now().toLocal().subtract(Duration(minutes: 1)).toString());
       if (temp.lastUpdate
-          .isBefore(DateTime.now().toLocal().subtract(Duration(hours: 6)))) {
+          .isBefore(DateTime.now().toLocal().subtract(Duration(minutes: 1)))) {
         // deviceList[index].connectionState = 'connecting';
       } else {
         print('아직 시간이 안됨 !');
         // print('Last Update Time : ' + temp.lastUpdate.toString());
         // print('Enable Time : ' +
-        //     DateTime.now().toLocal().subtract(Duration(hours: 6)).toString());
+        //     DateTime.now().toLocal().subtract(Duration(minutes: 1)).toString());
         setState(() {
           deviceList[index].connectionState = 'scan';
         });
@@ -975,7 +1050,7 @@ class ScanscreenState extends State<Scanscreen> {
                 color: deviceList[index].lastUpdateTime == null ||
                         deviceList[index].lastUpdateTime.isBefore(DateTime.now()
                             .toLocal()
-                            .subtract(Duration(hours: 6)))
+                            .subtract(Duration(minutes: 1)))
                     ? Color.fromRGBO(0x61, 0xB2, 0xD0, 1)
                     : Colors.white,
                 boxShadow: [customeBoxShadow()],
@@ -1002,6 +1077,10 @@ class ScanscreenState extends State<Scanscreen> {
                               mainAxisAlignment: MainAxisAlignment.spaceAround,
                               children: [
                                 Text(deviceList[index].getserialNumber(),
+                                    style: boldTextStyle),
+                                Text(
+                                    (deviceList[index].cali * 0.01)
+                                        .toStringAsFixed(2),
                                     style: boldTextStyle),
 
                                 // Text(deviceList[index]
@@ -1063,26 +1142,26 @@ class ScanscreenState extends State<Scanscreen> {
                                     ),
                                   ],
                                 ),
-                                // Row(
-                                //   mainAxisAlignment: MainAxisAlignment.center,
-                                //   children: [
-                                //     Image(
-                                //       image:
-                                //           AssetImage('images/ic_humidity.png'),
-                                //       fit: BoxFit.contain,
-                                //       width: MediaQuery.of(context).size.width *
-                                //           0.05,
-                                //       // height: MediaQuery.of(context).size.width * 0.1,
-                                //     ),
-                                //     Text(
-                                //       deviceList[index]
-                                //               .getHumidity()
-                                //               .toString() +
-                                //           '% ',
-                                //       style: noboldTextStyle,
-                                //     ),
-                                //   ],
-                                // ),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Image(
+                                      image:
+                                          AssetImage('images/ic_humidity.png'),
+                                      fit: BoxFit.contain,
+                                      width: MediaQuery.of(context).size.width *
+                                          0.05,
+                                      // height: MediaQuery.of(context).size.width * 0.1,
+                                    ),
+                                    Text(
+                                      deviceList[index]
+                                              .getHumidity()
+                                              .toString() +
+                                          '% ',
+                                      style: noboldTextStyle,
+                                    ),
+                                  ],
+                                ),
                                 Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
@@ -1357,7 +1436,7 @@ class ScanscreenState extends State<Scanscreen> {
   }
 
   TextStyle thinSmallTextStyle = TextStyle(
-    fontSize: 14,
+    fontSize: 13,
     color: Color.fromRGBO(21, 21, 21, 1),
     fontWeight: FontWeight.w500,
   );

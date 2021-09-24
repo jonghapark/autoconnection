@@ -15,6 +15,8 @@ class BleDeviceItem {
   List<LogData> logDatas = [];
   String firstPath = '';
   String secondPath = '';
+  int cali = 0;
+  int humi_cali = 0;
   BleDeviceItem(this.deviceName, this.rssi, this.peripheral,
       this.advertisementData, this.connectionState);
 
@@ -24,6 +26,7 @@ class BleDeviceItem {
         .getInt16(0, Endian.big);
     // print(tmp);
     // lastUpdateTime = DateTime.now();
+    tmp += cali;
     return tmp / 100;
   }
 
@@ -32,6 +35,7 @@ class BleDeviceItem {
             this.advertisementData.manufacturerData.sublist(14, 16))
         .getInt16(0, Endian.big);
     // print(tmp);
+    tmp += humi_cali;
     return tmp / 100;
   }
 
