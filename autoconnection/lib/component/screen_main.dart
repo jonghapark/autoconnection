@@ -313,7 +313,7 @@ class ScanscreenState extends State<Scanscreen> {
           }
         }
         if (notifyResult[10] == 0x13) {
-          // print('오긴함 ?');
+          print('오긴함 ?');
           int index = -1;
           for (var i = 0; i < deviceList.length; i++) {
             if (deviceList[i].peripheral.identifier == peripheral.identifier) {
@@ -321,11 +321,18 @@ class ScanscreenState extends State<Scanscreen> {
               break;
             }
           }
+
           // int cal = 0;
-          int tmp = ByteData.sublistView(notifyResult.sublist(12, 14))
-              .getInt16(0, Endian.big);
-          int tmp_humi = ByteData.sublistView(notifyResult.sublist(14, 16))
-              .getInt16(0, Endian.big);
+          Uint8List temp1 = Uint8List.fromList(notifyResult.sublist(12, 14));
+          print(temp1);
+          Uint8List temp2 = Uint8List.fromList(notifyResult.sublist(14, 16));
+          print(temp2);
+          int tmp = ByteData.sublistView(temp1).getInt16(0, Endian.big);
+          int tmp_humi = ByteData.sublistView(temp2).getInt16(0, Endian.big);
+          print('Result !!!');
+          print(tmp);
+          print(tmp_humi);
+
           setState(() {
             deviceList[index].cali = tmp;
             deviceList[index].humi_cali = tmp_humi;
@@ -492,8 +499,8 @@ class ScanscreenState extends State<Scanscreen> {
                 Uint8List.fromList([0x55, 0xAA, 0x01, 0x06] +
                     deviceList[index].getMacAddress() +
                     [0x0e, 0x04] +
-                    [0x00, 100 * 2 - (100 ~/ 10)] +
-                    [0x00, 0xa4]),
+                    [0x00, 0x64] +
+                    [0x00, 0x64]),
                 true);
         // cali_get
         // print('현재 Cali ! ');
