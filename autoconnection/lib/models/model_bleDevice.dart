@@ -9,14 +9,24 @@ class BleDeviceItem {
   DateTime lastUpdateTime;
   String deviceName;
   Peripheral peripheral;
+
   int rssi;
+  // 이게 Broadcasting Data 온도/습도 저장
   AdvertisementData advertisementData;
+  // advertisementData.manufacturerData 이게 진짜 브로드캐스팅 데이터
+
   String connectionState;
+  // 저장된 데이터를 담는 변수
   List<LogData> logDatas = [];
+  // 필요x
   String firstPath = '';
   String secondPath = '';
+  // 칼리브레이션 저장
+  // 온도 칼리
   int cali = 0;
+  // 습도 칼리
   int humi_cali = 0;
+
   BleDeviceItem(this.deviceName, this.rssi, this.peripheral,
       this.advertisementData, this.connectionState);
 
@@ -63,10 +73,12 @@ class BleDeviceItem {
     int tmps2 = int.parse(tmp2);
     String result = tmps.toRadixString(16);
     if (tmps2 < 10) {
+      // 여섯자리 맞춰주려고  예를들어 F 로 반환되는 값을 0F 로 수정.
       result += '0' + tmps2.toRadixString(16);
     } else {
       result += tmps2.toRadixString(16);
     }
+    // 서버에 보낼때 사용하는 이름.
     return 'Sensor_' + tmpString;
   }
 
@@ -108,7 +120,6 @@ class BleDeviceItem {
   }
 
   getMacAddress() {
-    print('3' + this.advertisementData.manufacturerData.toString());
     Uint8List macAddress =
         this.advertisementData.manufacturerData.sublist(4, 10);
     return macAddress;

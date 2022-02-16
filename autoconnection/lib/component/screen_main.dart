@@ -61,6 +61,7 @@ class ScanscreenState extends State<Scanscreen> {
   bool isConnectedState() {
     bool temp = false;
     int count = 0;
+    // 연결완료거나 연결중인 디바이스 개수를 찾는다.
     for (int i = 0; i < deviceList.length; i++) {
       if (deviceList[i].connectionState == 'connect' ||
           deviceList[i].connectionState == 'connecting') {
@@ -69,7 +70,7 @@ class ScanscreenState extends State<Scanscreen> {
         // break;
       }
     }
-
+    // 동시에 연결할 수 있는 디바이스를 2개로 제한
     // return temp;
     if (count > 2) {
       return true;
@@ -96,11 +97,15 @@ class ScanscreenState extends State<Scanscreen> {
     // _allDeviceTemp = DBHelper().getAllDevices();
     super.initState();
     // getCurrentLocation();
+    // 30분마다 자동 새로고침  타이머
     startTimer();
+
+    // 화면꺼지지 않게 하는 기능
     Wakelock.enable();
     currentDeviceName = '';
     currentTemp = '-';
     currentHumi = '-';
+    // BLE 스캔 초기화
     init();
   }
 
@@ -127,7 +132,7 @@ class ScanscreenState extends State<Scanscreen> {
       List<LogData> list, String devicename, int battery) async {
     // var client = http.Client();
     // print(socket.port);
-    Socket socket = await Socket.connect('175.126.232.236', 9983);
+    Socket socket = await Socket.connect('175.126.77.180', 9972);
     print('port Number');
     print(socket.port);
     if (socket != null) {
@@ -185,13 +190,18 @@ class ScanscreenState extends State<Scanscreen> {
 
   Future<void> monitorCharacteristic(BleDeviceItem device, flag) async {
     await _runWithErrorHandling(() async {
-      Service service = await device.peripheral.services().then((services) =>
-          services.firstWhere((service) =>
+      Service service = await device.peripheral
+          .services()
+          .then((services) => services.firstWhere((service) =>
+              // 서비스 uuid
               service.uuid == '00001000-0000-1000-8000-00805f9b34fb'));
 
       List<Characteristic> characteristics = await service.characteristics();
-      Characteristic characteristic = characteristics.firstWhere(
-          (characteristic) =>
+
+      // notify characteristic
+      Characteristic characteristic =
+          characteristics.firstWhere((characteristic) =>
+              // notify uuid
               characteristic.uuid == '00001002-0000-1000-8000-00805f9b34fb');
 
       _startMonitoringTemperature(
@@ -222,7 +232,7 @@ class ScanscreenState extends State<Scanscreen> {
         //   await showMyDialog_StartTransport(context);
         //   Navigator.of(context).pop();
         // }
-        //
+        // 최소 최대 인덱스 결과 값
         if (notifyResult[10] == 0x03) {
           int index = -1;
           for (var i = 0; i < deviceList.length; i++) {
@@ -233,8 +243,11 @@ class ScanscreenState extends State<Scanscreen> {
           }
           // 최소 최대 인덱스
           if (index != -1) {
+            // 현재 시간과 최근 업로드 시간의 분단위 차이
             int deference = -1;
             if (deviceList[index].lastUpdateTime == null) {
+              // 업로드 한 기록이 없을 경우
+              // 15000분 / 60 / 24 = 10.4 일치 데이터 가져오기
               deference = 15000;
             } else {
               Duration temps = DateTime.now()
@@ -249,12 +262,15 @@ class ScanscreenState extends State<Scanscreen> {
             }
             Uint8List minmaxStamp = getMinMaxTimestamp(notifyResult);
 
+            // threeBytesToint -> 바이트 인덱스를 인트로 변환
+            // 시작 인덱스
             int startStamp = threeBytesToint(minmaxStamp.sublist(0, 3));
+            // 끝 인덱스
             int endStamp = threeBytesToint(minmaxStamp.sublist(3, 6));
             int tempstamp =
                 threeBytesToint(minmaxStamp.sublist(3, 6)) - deference;
             if (tempstamp < 0) {
-              // tempstamp += deference;
+              // 저장된게 deference 보다 적을 경우
               tempstamp = startStamp;
             }
 
@@ -301,6 +317,7 @@ class ScanscreenState extends State<Scanscreen> {
           if (index != -1) {
             LogData temp = transformData(notifyResult);
             // print(temp.temperature.toString());
+            // 이미 보낸 데이터를 다시 보내지 않기 위해 최근 업로드 시간이후 데이터만 가져온다.
             if (deviceList[index].lastUpdateTime != null) {
               if (temp.timestamp
                   .toLocal()
@@ -440,7 +457,9 @@ class ScanscreenState extends State<Scanscreen> {
 
   void startRoutine(int index, flag) async {
     // 여기 !
+    // notify 리스너 열기.
     await monitorCharacteristic(deviceList[index], flag);
+    // 현재시간 16진수로 변환해서 얻기.
     String unixTimestamp =
         (DateTime.now().toUtc().millisecondsSinceEpoch / 1000)
             .toInt()
@@ -499,8 +518,8 @@ class ScanscreenState extends State<Scanscreen> {
                 Uint8List.fromList([0x55, 0xAA, 0x01, 0x06] +
                     deviceList[index].getMacAddress() +
                     [0x0e, 0x04] +
-                    [0x00, 0x64] +
-                    [0x00, 0x64]),
+                    [0x00, 0x10] +
+                    [0x00, 0x10]),
                 true);
         // cali_get
         // print('현재 Cali ! ');
@@ -515,7 +534,7 @@ class ScanscreenState extends State<Scanscreen> {
                     [0x12, 0x01, 0x01]),
                 true);
 
-        // get History Data - T306
+        // get MinMax Index Data - T306
         var writeCharacteristics = await deviceList[index]
             .peripheral
             .writeCharacteristic(
@@ -559,6 +578,7 @@ class ScanscreenState extends State<Scanscreen> {
     if (isStart == true) return;
     const oneSec = const Duration(minutes: 30);
     const fiveSec = const Duration(seconds: 5);
+    // 일정 주기마다 계속 실행되는 함수
     _timer = new Timer.periodic(
       oneSec,
       (Timer timer) => setState(
@@ -567,17 +587,23 @@ class ScanscreenState extends State<Scanscreen> {
           _start = _start + 1;
           // if (_start % 5 == 0) {
           print('현재 몇번 돌았니 ? -> ' + _start.toString());
+
+          // 새로 scan 을 키기 전에 이전 스캔루틴을 종료.
           _bleManager.stopPeripheralScan();
+
+          // 5초 짜리 타이머 / 5초후에 스캔다시on
           Timer temp = new Timer.periodic(
             fiveSec,
             (Timer timer) => setState(
               () {
                 // if (_start % 5 == 0) {
-
+                // notify 리스너 종료.
                 _stopMonitoringTemperature();
+
                 setState(() {
                   _isScanning = false;
                 });
+                // 다시 스캔루틴 시작.
                 scan();
                 timer.cancel();
               },
@@ -613,11 +639,13 @@ class ScanscreenState extends State<Scanscreen> {
   // 권한 확인 함수 권한 없으면 권한 요청 화면 표시, 안드로이드만 상관 있음
   _checkPermissions() async {
     if (Platform.isAndroid) {
+      // 권한이 있는지 확인하는 if문
       if (await Permission.location.request().isGranted) {
         print('입장하냐?');
         scan();
         return;
       }
+      // 위치 권한은 사용자에게 물어봄
       Map<Permission, PermissionStatus> statuses =
           await [Permission.location].request();
       if (statuses[Permission.location].toString() ==
@@ -635,20 +663,24 @@ class ScanscreenState extends State<Scanscreen> {
     if (!_isScanning) {
       print('스캔시작');
       setState(() {
-        deviceList.clear(); //기존 장치 리스트 초기화
+        //기존 장치 리스트 초기화
+        deviceList.clear();
       });
       //SCAN 시작
       if (Platform.isAndroid) {
+        // 스캔 시작
+        // ScanMode 로 스캔 속도 조절 가능
         _bleManager.startPeripheralScan(scanMode: ScanMode.lowLatency).listen(
             (scanResult) {
           //listen 이벤트 형식으로 장치가 발견되면 해당 루틴을 계속 탐.
           //periphernal.name이 없으면 advertisementData.localName확인 이것도 없다면 unknown으로 표시
-          //print(scanResult.peripheral.name);
+          // print(scanResult.peripheral.name);
           var name = scanResult.peripheral.name ??
               scanResult.advertisementData.localName ??
               "Unknown";
           // 기존에 존재하는 장치면 업데이트
           // print('lenght: ' + deviceList.length.toString());
+          // deviceList 안에 목록들을 업데이트
           var findDevice = deviceList.any((element) {
             if (element.peripheral.identifier ==
                 scanResult.peripheral.identifier) {
@@ -658,6 +690,8 @@ class ScanscreenState extends State<Scanscreen> {
 
               if (element.connectionState == 'scan') {
                 int index = -1;
+                // 계속해서 인덱스를 검사하는 이유는 오름차순 정렬과 같이 리스트가 변동이 있는 상황에서
+                // 기존 인덱스와 현재시점의 인덱스가 달라질 수 있기 때문에 이를 방지하고자 .. 계속 검사
                 for (var i = 0; i < deviceList.length; i++) {
                   if (deviceList[i].peripheral.identifier ==
                       scanResult.peripheral.identifier) {
@@ -713,28 +747,27 @@ class ScanscreenState extends State<Scanscreen> {
                         scanResult.peripheral,
                         scanResult.advertisementData,
                         'scan');
-                    if (currentItem.getserialNumber() == 'CEDF04' ||
-                        currentItem.getserialNumber() == '967051') {
-                      print(currentItem.peripheral.identifier);
-                      print('인 !');
-                      setState(() {
-                        deviceList.add(currentItem);
-                      });
 
-                      int index = -1;
-                      for (var i = 0; i < deviceList.length; i++) {
-                        if (deviceList[i].peripheral.identifier ==
-                            currentItem.peripheral.identifier) {
-                          index = i;
-                          break;
-                        }
-                      }
-                      if (index != -1) {
-                        if (!isConnectedState()) {
-                          connect(index, 0);
-                        }
+                    print(currentItem.peripheral.identifier);
+                    print('인 !');
+                    setState(() {
+                      deviceList.add(currentItem);
+                    });
+
+                    int index = -1;
+                    for (var i = 0; i < deviceList.length; i++) {
+                      if (deviceList[i].peripheral.identifier ==
+                          currentItem.peripheral.identifier) {
+                        index = i;
+                        break;
                       }
                     }
+                    if (index != -1) {
+                      if (!isConnectedState()) {
+                        connect(index, 0);
+                      }
+                    }
+
                     // connect(deviceList.length - 1, 0);
                   }
                 }
@@ -791,6 +824,7 @@ class ScanscreenState extends State<Scanscreen> {
   //연결 함수
   connect(index, flag) async {
     bool goodConnection = false;
+    // 연결중인 상태에서는 바로 리턴.
     if (currentState == 'connected') {
       return;
       // //이미 연결상태면 연결 해제후 종료
@@ -825,8 +859,13 @@ class ScanscreenState extends State<Scanscreen> {
       print('이미존재함 : ' + deviceList[index].getserialNumber());
       print('Last Update Time1 : ' + temp.lastUpdate.toString());
       // TODO: 시간 수정(3개) 필수 !
+
       print('Enable Time1 : ' +
           DateTime.now().toLocal().subtract(Duration(minutes: 1)).toString());
+
+      // 여기서 나오는 Duration 이 전송주기. 이 시간마다 전송을 시도한다. 즉 이 시간에 따라 파란불이 들어오고 전송을 시도.
+      // 보내는 주기를 바꿀땐 검색으로 한번에 4개를 바꾸어야한다.
+      // 위 if문이 보내야할 시점
       if (temp.lastUpdate
           .isBefore(DateTime.now().toLocal().subtract(Duration(minutes: 1)))) {
         // deviceList[index].connectionState = 'connecting';
@@ -841,6 +880,7 @@ class ScanscreenState extends State<Scanscreen> {
         return;
       }
     }
+
     print(deviceList[index].getserialNumber() + ' : Connection Start\n');
     //해당 장치와의 연결상태를 관촬하는 리스너 실행
     peripheral
@@ -944,6 +984,7 @@ class ScanscreenState extends State<Scanscreen> {
             if (tempIndex != -1) {
               //FIXME: 여기 setState 문제가 있을 수 있네??
               setState(() {
+                // 연결이 끊긴 것도 다시 스캔가능한 상태로 바꿔주기 위해
                 deviceList[tempIndex].connectionState = 'scan';
               });
             }
@@ -978,9 +1019,10 @@ class ScanscreenState extends State<Scanscreen> {
         return this._connected;
       }
 
-      //연결 시작!
+      //진짜 연결하는 부분
       await peripheral
           .connect(
+        // 연결이 성공할때까지 시도하는 기능
         isAutoConnect: false,
       )
           .then((_) {
@@ -1085,10 +1127,10 @@ class ScanscreenState extends State<Scanscreen> {
                               children: [
                                 Text(deviceList[index].getserialNumber(),
                                     style: boldTextStyle),
-                                Text(
-                                    (deviceList[index].cali * 0.01)
-                                        .toStringAsFixed(2),
-                                    style: boldTextStyle),
+                                // Text(
+                                //     (deviceList[index].cali * 0.01)
+                                //         .toStringAsFixed(2),
+                                //     style: boldTextStyle),
 
                                 // Text(deviceList[index]
                                 //     .lastUpdateTime
@@ -1213,6 +1255,7 @@ class ScanscreenState extends State<Scanscreen> {
         title: 'OPTILO',
         theme: ThemeData(
           // primarySwatch: Colors.grey,
+
           primaryColor: Color.fromRGBO(0x4C, 0xA5, 0xC7, 1),
           //canvasColor: Colors.transparent,
         ),
@@ -1224,41 +1267,41 @@ class ScanscreenState extends State<Scanscreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     AppBar(
-                        // backgroundColor: Color.fromARGB(22, 27, 32, 1),
+                        backgroundColor: Color.fromRGBO(0x4C, 0xA5, 0xC7, 1),
                         title: Row(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          flex: 5,
-                          child: SizedBox(),
-                          // Image(
-                          //   image: AssetImage('images/geo_young.png'),
-                          //   fit: BoxFit.contain,
-                          //   // width: MediaQuery.of(context).size.width * 0.2,
-                          //   height: 60,
-                          // ),
-                        ),
-                        Expanded(
-                          flex: 8,
-                          child: Row(
-                              mainAxisAlignment: MainAxisAlignment.start,
-                              children: [
-                                Image(
-                                  image: AssetImage('images/logos.png'),
-                                  fit: BoxFit.contain,
-                                  width:
-                                      MediaQuery.of(context).size.width * 0.4,
-                                  // height: MediaQuery.of(context).size.width * 0.1,
-                                ),
-                              ]),
-                        ),
-                        Expanded(
-                          flex: 4,
-                          child: SizedBox(),
-                        ),
-                      ],
-                    )),
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              flex: 5,
+                              child: SizedBox(),
+                              // Image(
+                              //   image: AssetImage('images/geo_young.png'),
+                              //   fit: BoxFit.contain,
+                              //   // width: MediaQuery.of(context).size.width * 0.2,
+                              //   height: 60,
+                              // ),
+                            ),
+                            Expanded(
+                              flex: 8,
+                              child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.start,
+                                  children: [
+                                    Image(
+                                      image: AssetImage('images/logos.png'),
+                                      fit: BoxFit.contain,
+                                      width: MediaQuery.of(context).size.width *
+                                          0.4,
+                                      // height: MediaQuery.of(context).size.width * 0.1,
+                                    ),
+                                  ]),
+                            ),
+                            Expanded(
+                              flex: 4,
+                              child: SizedBox(),
+                            ),
+                          ],
+                        )),
                   ],
                 )),
             body: WillPopScope(
@@ -1718,7 +1761,7 @@ showMyDialog_StartTransport(BuildContext context) {
   );
 }
 
-//Datalog Parsing
+// 리스너를 통해 들어온 데이터를 실제 값으로 파싱
 LogData transformData(Uint8List notifyResult) {
   return new LogData(
       temperature: getLogTemperature(notifyResult),

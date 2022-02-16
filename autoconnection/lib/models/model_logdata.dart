@@ -8,10 +8,8 @@ final String TableName = 'DeviceInfo';
 
 class DeviceInfo {
   List<LogData> logDatas;
-
   String macAddress;
   DateTime lastUpdate;
-
   DeviceInfo({this.macAddress, this.lastUpdate});
 }
 
